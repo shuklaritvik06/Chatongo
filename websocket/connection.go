@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
+
+var rooms = make(map[string]Room)
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -15,26 +18,31 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (new_room *Room) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func CreateRoom(w http.ResponseWriter, r *http.Request) {
+	room := NewRoom(mux.Vars(r)["id"])
+	rooms[room.ID] = *room
+	go room.Run()
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Created Room Successfully!",
+	})
+}
+
+func RoomRouteHandler(w http.ResponseWriter, r *http.Request) {
+	room := rooms[mux.Vars(r)["id"]]
 	socket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	client := &Client{
-		room:    new_room,
+		room:    room,
 		conn:    socket,
 		recieve: make(chan *Message),
 	}
-	new_room.Register <- client
-	defer func() { new_room.Unregsister <- client }()
+	room.Register <- client
+	defer func() { room.Unregsister <- client }()
 	go client.write()
+	go room.Run()
 	client.read()
-	json.NewEncoder(w).Encode(
-		map[string]string{
-			"message": "success",
-			"room_id": new_room.ID,
-		},
-	)
 }
 
 func NewRoom(id string) *Room {

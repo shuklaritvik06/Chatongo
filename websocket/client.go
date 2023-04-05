@@ -9,7 +9,7 @@ import (
 )
 
 type Client struct {
-	room    *Room
+	room    Room
 	conn    *websocket.Conn
 	recieve chan *Message
 }
